@@ -1,0 +1,949 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ccedit-fix-proxy — 项目汇报</title>
+<style>
+/* ── Reset & Base ── */
+*{margin:0;padding:0;box-sizing:border-box}
+html{font-size:14px;scroll-behavior:smooth;scroll-snap-type:y proximity}
+body{
+  font-family:-apple-system,'Segoe UI','Helvetica Neue','PingFang SC','Microsoft YaHei',sans-serif;
+  background:#f5f5f5;
+  color:#1a1a1a;
+  line-height:1.65;
+  -webkit-font-smoothing:antialiased;
+}
+
+/* ── Colors ── */
+:root{
+  --white:#ffffff;
+  --bg:#f5f5f5;
+  --ink:#1a1a1a;
+  --ink2:#374151;
+  --ink3:#6b7280;
+  --ink4:#9ca3af;
+  --border:#e5e7eb;
+  --border2:#d1d5db;
+  --red:#dc2626;
+  --red2:#b91c1c;
+  --red-bg:#fef2f2;
+  --red-bdr:#fca5a5;
+  --blue:#1d4ed8;
+  --blue2:#1e40af;
+  --blue-bg:#eff6ff;
+  --blue-bdr:#93c5fd;
+  --green:#15803d;
+  --green-bg:#f0fdf4;
+  --green-bdr:#86efac;
+  --amber:#b45309;
+  --amber-bg:#fffbeb;
+  --amber-bdr:#fcd34d;
+  --violet:#7c3aed;
+  --violet-bg:#f5f3ff;
+  --violet-bdr:#c4b5fd;
+  --cyan:#0e7490;
+  --cyan-bg:#ecfeff;
+  --cyan-bdr:#67e8f9;
+  --mono:'JetBrains Mono','Fira Code','Consolas',monospace;
+}
+
+/* ── Slide ── */
+.slide{
+  min-height:100vh;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+  padding:48px 32px;
+  scroll-snap-align:start;
+  position:relative;
+}
+.slide-inner{
+  width:100%;
+  max-width:960px;
+}
+.slide-num{
+  font-family:var(--mono);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:2.5px;
+  text-transform:uppercase;
+  color:var(--red);
+  margin-bottom:8px;
+}
+.slide-title{
+  font-size:34px;
+  font-weight:800;
+  letter-spacing:-0.5px;
+  line-height:1.2;
+  margin-bottom:8px;
+  color:var(--ink);
+}
+.slide-subtitle{
+  font-size:16px;
+  color:var(--ink3);
+  margin-bottom:32px;
+  max-width:640px;
+}
+.slide p{margin-bottom:12px;color:var(--ink2);font-size:14px;}
+
+/* ── Card ── */
+.card{
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  padding:20px;
+}
+
+/* ── Slide: Cover ── */
+.slide-cover{
+  background:var(--white);
+  border-bottom:4px solid var(--red);
+}
+.slide-cover .cover-inner{text-align:center;max-width:680px;}
+.slide-cover .badge{
+  display:inline-flex;align-items:center;gap:6px;
+  padding:5px 14px;border-radius:6px;
+  background:var(--red-bg);border:1px solid var(--red-bdr);
+  font-size:11px;font-weight:700;letter-spacing:2px;text-transform:uppercase;
+  color:var(--red);margin-bottom:24px;
+}
+.slide-cover .badge::before{
+  content:'';width:7px;height:7px;background:var(--red);border-radius:50%;
+  animation:pulse 2s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+.slide-cover h1{
+  font-size:48px;font-weight:900;letter-spacing:-1px;line-height:1.1;
+  margin-bottom:16px;color:var(--ink);
+}
+.slide-cover h1 span{color:var(--red);}
+.slide-cover .desc{
+  font-size:18px;color:var(--ink3);line-height:1.7;margin-bottom:36px;
+}
+.slide-cover .meta-row{
+  display:flex;justify-content:center;gap:32px;
+  padding-top:24px;border-top:1px solid var(--border);
+}
+.slide-cover .meta-item{display:flex;flex-direction:column;gap:2px;}
+.slide-cover .meta-label{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:1.5px;text-transform:uppercase;color:var(--ink4);
+}
+.slide-cover .meta-value{font-size:13px;font-weight:700;color:var(--ink);}
+
+/* ── Slide: Problem ── */
+.problem-list{
+  display:grid;grid-template-columns:1fr 1fr;gap:14px;
+}
+.problem-item{
+  display:flex;align-items:flex-start;gap:14px;
+  padding:18px 20px;
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  border-left:4px solid var(--red);
+}
+.problem-item .pi-icon{
+  width:36px;height:36px;min-width:36px;
+  display:flex;align-items:center;justify-content:center;
+  background:var(--red-bg);border-radius:8px;
+  font-family:var(--mono);font-size:16px;font-weight:800;color:var(--red);
+}
+.problem-item .pi-name{font-weight:700;font-size:13px;margin-bottom:2px;}
+.problem-item .pi-desc{font-size:12px;color:var(--ink3);line-height:1.5;}
+.problem-item .pi-desc code{
+  font-family:var(--mono);font-size:11px;
+  background:#f3f4f6;padding:1px 4px;border-radius:3px;
+}
+
+/* ── Topology Diagram ── */
+.topo-diagram{
+  background:var(--white);
+  border:1.5px solid var(--border);
+  border-radius:12px;
+  padding:36px 28px 28px;
+}
+.topo-main{
+  display:flex;
+  align-items:stretch;
+  gap:0;
+  margin-bottom:20px;
+}
+.topo-node{
+  flex:1;
+  padding:20px 18px;
+  border-radius:10px;
+  text-align:center;
+}
+.topo-node .tn-tag{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;opacity:.7;margin-bottom:4px;
+}
+.topo-node .tn-name{font-size:15px;font-weight:800;margin-bottom:3px;}
+.topo-node .tn-desc{font-size:11.5px;color:var(--ink3);line-height:1.5;}
+
+.topo-node.cc{background:var(--blue-bg);border:2px solid var(--blue-bdr);}
+.topo-node.cc .tn-tag,.topo-node.cc .tn-name{color:var(--blue);}
+.topo-node.proxy{background:var(--red-bg);border:2px solid var(--red-bdr);flex:1.6;}
+.topo-node.proxy .tn-tag,.topo-node.proxy .tn-name{color:var(--red);}
+.topo-node.api{background:var(--violet-bg);border:2px solid var(--violet-bdr);}
+.topo-node.api .tn-tag,.topo-node.api .tn-name{color:var(--violet);}
+
+.topo-arrow{
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  width:52px;min-width:52px;gap:4px;
+}
+.topo-arrow .ta-line{
+  width:32px;height:2.5px;background:var(--border2);border-radius:2px;position:relative;
+}
+.topo-arrow .ta-line::after{
+  content:'';position:absolute;right:-2px;top:-3px;
+  border:4.5px solid transparent;border-left:6px solid var(--border2);
+}
+.topo-arrow .ta-label{font-size:9px;font-weight:700;color:var(--ink4);letter-spacing:.5px;}
+
+.topo-file-row{
+  display:flex;justify-content:center;
+  padding-top:20px;border-top:1px dashed var(--border);
+}
+.topo-file{
+  padding:14px 28px;background:var(--amber-bg);border:2px solid var(--amber-bdr);
+  border-radius:10px;text-align:center;min-width:220px;
+}
+.topo-file .tn-tag{color:var(--amber);}
+.topo-file .tn-name{color:var(--amber);}
+.topo-file .tn-desc{font-size:11px;color:var(--ink3);}
+
+/* ── Pipeline ── */
+.pipeline{
+  display:flex;
+  border:1.5px solid var(--border);
+  border-radius:10px;
+  overflow:hidden;
+  margin-top:24px;
+}
+.pipe{
+  flex:1;padding:16px 12px;text-align:center;
+  border-right:1px solid var(--border);
+}
+.pipe:last-child{border-right:none;}
+.pipe .p-num{font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:1px;margin-bottom:3px;}
+.pipe .p-name{font-size:12px;font-weight:800;margin-bottom:2px;}
+.pipe .p-desc{font-size:10.5px;color:var(--ink3);line-height:1.45;}
+.pipe.s1{background:var(--blue-bg);}.pipe.s1 .p-num,.pipe.s1 .p-name{color:var(--blue);}
+.pipe.s2{background:var(--cyan-bg);}.pipe.s2 .p-num,.pipe.s2 .p-name{color:var(--cyan);}
+.pipe.s3{background:var(--red-bg);}.pipe.s3 .p-num,.pipe.s3 .p-name{color:var(--red);}
+.pipe.s4{background:var(--amber-bg);}.pipe.s4 .p-num,.pipe.s4 .p-name{color:var(--amber);}
+.pipe.s5{background:var(--green-bg);}.pipe.s5 .p-num,.pipe.s5 .p-name{color:var(--green);}
+
+/* ── State Machine ── */
+.state-diagram{
+  display:flex;align-items:center;justify-content:center;gap:0;
+  padding:12px 0;
+}
+.state-box{
+  padding:20px 28px;border-radius:12px;text-align:center;min-width:160px;
+}
+.state-box .sb-name{font-size:16px;font-weight:800;margin-bottom:3px;}
+.state-box .sb-desc{font-size:11px;color:var(--ink3);line-height:1.55;}
+.state-box.pass{background:var(--green-bg);border:2.5px solid var(--green-bdr);}
+.state-box.pass .sb-name{color:var(--green);}
+.state-box.buf{background:var(--red-bg);border:2.5px solid var(--red-bdr);}
+.state-box.buf .sb-name{color:var(--red);}
+
+.state-trans{
+  display:flex;flex-direction:column;align-items:center;padding:0 10px;min-width:120px;gap:3px;
+}
+.state-trans .st-line{
+  width:100%;height:2.5px;background:var(--border2);border-radius:2px;position:relative;
+}
+.state-trans .st-line::after{
+  content:'';position:absolute;right:-2px;top:-3.5px;
+  border:5px solid transparent;border-left:6px solid var(--border2);
+}
+.state-trans.rev .st-line::after{
+  right:auto;left:-2px;border-left:none;border-right:6px solid var(--border2);
+}
+.state-trans .st-label{
+  font-size:9.5px;font-weight:700;letter-spacing:.3px;
+  padding:2px 8px;border-radius:4px;white-space:nowrap;
+}
+.state-trans .st-label.fwd{color:var(--amber);background:var(--amber-bg);}
+.state-trans .st-label.back{color:var(--green);background:var(--green-bg);}
+.state-trans .st-sub{font-size:8.5px;color:var(--ink4);}
+
+/* ── Timeline ── */
+.timeline{margin-top:24px;}
+.tl-row{display:flex;align-items:center;gap:10px;margin-bottom:8px;}
+.tl-row:last-child{margin-bottom:0;}
+.tl-actor{
+  width:70px;min-width:70px;text-align:right;
+  font-family:var(--mono);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;
+}
+.tl-actor.a-api{color:var(--violet);}
+.tl-actor.a-proxy{color:var(--red);}
+.tl-actor.a-cc{color:var(--blue);}
+.tl-track{
+  flex:1;height:34px;background:#f9fafb;border:1.5px solid var(--border);
+  border-radius:7px;display:flex;align-items:center;padding:0 8px;gap:5px;overflow:hidden;
+}
+.tl-tag{
+  padding:3px 9px;border-radius:4px;font-size:10.5px;font-weight:600;white-space:nowrap;flex-shrink:0;
+}
+.tl-tag.sse{background:#fff;border:1px solid var(--border2);color:var(--ink2);}
+.tl-tag.data{background:var(--cyan-bg);border:1px solid var(--cyan-bdr);color:var(--cyan);}
+.tl-tag.action{background:var(--red-bg);border:1px solid var(--red-bdr);color:var(--red);}
+.tl-tag.result{background:var(--green-bg);border:1px solid var(--green-bdr);color:var(--green);}
+.tl-tag.dim{color:var(--ink4);font-weight:400;}
+
+.pass-note{
+  margin-top:16px;padding:12px 16px;
+  background:var(--green-bg);border:1px solid var(--green-bdr);border-radius:8px;
+  font-size:12.5px;color:#14532d;
+}
+.pass-note strong{color:var(--green);}
+
+/* ── Strategy Grid ── */
+.strat-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;
+}
+.strat-card{
+  padding:16px 18px;background:var(--white);
+  border:1.5px solid var(--border);border-radius:10px;
+  display:flex;align-items:flex-start;gap:12px;
+}
+.strat-num{
+  width:28px;height:28px;min-width:28px;display:flex;align-items:center;justify-content:center;
+  border-radius:7px;font-family:var(--mono);font-size:11px;font-weight:800;margin-top:1px;
+}
+.strat-num.l1{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bdr);}
+.strat-num.l2{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bdr);}
+.strat-num.extra{background:var(--amber-bg);color:var(--amber);border:1px solid var(--amber-bdr);}
+.strat-info .si-name{font-size:13px;font-weight:700;margin-bottom:2px;}
+.strat-info .si-desc{font-size:11.5px;color:var(--ink3);line-height:1.5;}
+.tag{
+  display:inline-block;padding:1px 6px;border-radius:3px;
+  font-family:var(--mono);font-size:8.5px;font-weight:700;letter-spacing:.3px;
+  text-transform:uppercase;vertical-align:middle;margin-left:4px;
+}
+.tag.native{background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-bdr);}
+.tag.extra{background:var(--red-bg);color:var(--red);border:1px solid var(--red-bdr);}
+.tag.new{background:var(--green-bg);color:var(--green);border:1px solid var(--green-bdr);}
+.tag.off{background:#f3f4f6;color:var(--ink4);border:1px solid var(--border);}
+
+/* ── Data Flow ── */
+.dataflow-box{
+  background:var(--white);border:1.5px solid var(--border);border-radius:12px;
+  padding:24px 20px;margin-top:20px;
+}
+.df-row{display:flex;align-items:center;gap:6px;margin-bottom:7px;flex-wrap:wrap;}
+.df-row:last-child{margin-bottom:0;}
+.df-label{
+  font-family:var(--mono);font-size:9px;font-weight:700;letter-spacing:.5px;
+  text-transform:uppercase;color:var(--ink4);width:60px;min-width:60px;
+}
+.df-b{
+  padding:5px 11px;border-radius:5px;font-size:11.5px;font-weight:600;white-space:nowrap;
+}
+.df-b.in{background:var(--cyan-bg);border:1px solid var(--cyan-bdr);color:var(--cyan);}
+.df-b.out{background:var(--green-bg);border:1px solid var(--green-bdr);color:var(--green);}
+.df-b.proc{background:var(--red-bg);border:1px solid var(--red-bdr);color:var(--red);}
+.df-b.file{background:var(--amber-bg);border:1px solid var(--amber-bdr);color:var(--amber);}
+.df-b.err{background:#f3f4f6;border:1px solid var(--border);color:var(--ink4);}
+.df-a{color:var(--ink4);font-size:11px;}
+
+/* ── SSE Recon ── */
+.recon-box{
+  background:var(--white);border:1.5px solid var(--border);border-radius:12px;
+  padding:24px 20px;
+}
+.recon-title{font-size:13px;font-weight:700;margin-bottom:14px;}
+.recon-row{display:flex;align-items:center;gap:6px;margin-bottom:6px;flex-wrap:wrap;}
+.recon-row:last-child{margin-bottom:0;}
+.recon-b{
+  padding:5px 11px;border-radius:5px;font-family:var(--mono);
+  font-size:10.5px;font-weight:600;white-space:nowrap;
+}
+.recon-b.del{background:#fff;border:1px dashed var(--border2);color:var(--ink4);text-decoration:line-through;}
+.recon-b.new{background:var(--green-bg);border:1px solid var(--green-bdr);color:var(--green);}
+
+.detail-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:20px;
+}
+.detail-card{
+  padding:14px 16px;background:#f9fafb;border:1px solid var(--border);border-radius:8px;
+}
+.detail-card .dc-title{font-size:12px;font-weight:700;margin-bottom:2px;}
+.detail-card .dc-desc{font-size:11px;color:var(--ink3);line-height:1.5;}
+
+/* ── Comparison Table ── */
+.comp{
+  border:1.5px solid var(--border);border-radius:10px;overflow:hidden;
+}
+.comp table{width:100%;border-collapse:collapse;font-size:13px;}
+.comp thead th{
+  text-align:left;padding:10px 14px;
+  font-size:9.5px;font-weight:700;letter-spacing:1px;text-transform:uppercase;
+  color:var(--ink4);background:#f9fafb;border-bottom:1.5px solid var(--border);
+}
+.comp tbody td{
+  padding:8px 14px;border-bottom:1px solid var(--border);color:var(--ink2);vertical-align:top;
+}
+.comp tbody tr:last-child td{border-bottom:none;}
+.comp tbody tr:hover{background:#f9fafb;}
+.comp td:first-child{font-weight:700;color:var(--ink);white-space:nowrap;width:120px;}
+.comp .check{color:var(--green);font-weight:700;}
+.comp .warn{color:var(--amber);font-weight:700;}
+.comp .na{color:var(--ink4);}
+
+/* ── Stats ── */
+.stat-row{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+.stat-card{
+  background:var(--white);border:1.5px solid var(--border);border-radius:10px;
+  padding:24px 16px;text-align:center;
+}
+.stat-card .sn{font-size:40px;font-weight:900;color:var(--blue);line-height:1;}
+.stat-card .su{font-size:15px;color:var(--blue);}
+.stat-card .sl{
+  font-family:var(--mono);font-size:9px;font-weight:700;
+  letter-spacing:1px;text-transform:uppercase;color:var(--ink4);margin-top:6px;
+}
+
+/* ── File Tree ── */
+.file-tree{
+  background:var(--white);border:1.5px solid var(--border);border-radius:10px;
+  padding:20px 24px;font-family:var(--mono);font-size:12px;line-height:2;color:var(--ink3);
+}
+.file-tree .dir{color:var(--blue);font-weight:700;}
+.file-tree .file{color:var(--ink);}
+.file-tree .cmt{color:var(--ink4);font-style:italic;}
+
+/* ── Principles ── */
+.principle-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-top:20px;}
+.principle{
+  padding:18px 16px;border-radius:10px;text-align:center;
+}
+.principle .pp-title{font-size:13px;font-weight:800;margin-bottom:3px;}
+.principle .pp-desc{font-size:11.5px;line-height:1.5;}
+.principle.p1{background:var(--blue-bg);border:1.5px solid var(--blue-bdr);}
+.principle.p1 .pp-title{color:var(--blue);}
+.principle.p1 .pp-desc{color:var(--blue2);}
+.principle.p2{background:var(--green-bg);border:1.5px solid var(--green-bdr);}
+.principle.p2 .pp-title{color:var(--green);}
+.principle.p2 .pp-desc{color:#14532d;}
+.principle.p3{background:var(--red-bg);border:1.5px solid var(--red-bdr);}
+.principle.p3 .pp-title{color:var(--red);}
+.principle.p3 .pp-desc{color:var(--red2);}
+
+/* ── Alert ── */
+.alert{
+  padding:16px 20px;border-radius:8px;margin:20px 0;border-left:4px solid;
+}
+.alert p{margin-bottom:5px;font-size:13px;}
+.alert p:last-child{margin-bottom:0;}
+.alert .at{font-weight:700;font-size:13px;margin-bottom:5px;}
+.alert.red{background:var(--red-bg);border-color:var(--red);}
+.alert.red .at{color:var(--red);}
+.alert.red p{color:#7f1d1d;}
+.alert.green{background:var(--green-bg);border-color:var(--green);}
+.alert.green .at{color:var(--green);}
+.alert.green p{color:#14532d;}
+.alert.blue{background:var(--blue-bg);border-color:var(--blue);}
+.alert.blue .at{color:var(--blue);}
+.alert.blue p{color:#1e3a5f;}
+
+/* ── Footer Slide ── */
+.slide-footer{
+  background:var(--white);
+  border-top:4px solid var(--red);
+  text-align:center;
+}
+.slide-footer .sf-line{width:40px;height:2px;background:var(--red);margin:0 auto 16px;border-radius:1px;}
+
+/* ── Responsive ── */
+@media(max-width:768px){
+  .slide{padding:32px 16px;}
+  .slide-cover h1{font-size:32px;}
+  .slide-title{font-size:26px;}
+  .problem-list,.strat-grid{grid-template-columns:1fr;}
+  .stat-row{grid-template-columns:1fr;}
+  .topo-main{flex-direction:column;gap:8px;}
+  .topo-arrow{width:auto;min-width:0;transform:rotate(90deg);padding:6px 0;}
+  .pipeline{flex-direction:column;}
+  .pipe{border-right:none;border-bottom:1px solid var(--border);}
+  .pipe:last-child{border-bottom:none;}
+  .state-diagram{flex-direction:column;gap:12px;}
+  .state-trans{transform:rotate(90deg);padding:8px 0;}
+  .detail-grid{grid-template-columns:1fr;}
+  .principle-row{grid-template-columns:1fr;}
+}
+</style>
+</head>
+<body>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 1: COVER                                                 -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-cover">
+  <div class="slide-inner cover-inner">
+    <div class="badge">Technical Report</div>
+    <h1><span>ccedit-fix-proxy</span><br>Claude Code Edit 修正代理</h1>
+    <div class="desc">
+      轻量级 SSE 正向代理，实时拦截并自动修正 GLM 等模型生成 Edit 调用时的
+      old_string 不匹配问题，使非原生 Claude 模型在 Claude Code 中获得可靠的文件编辑能力。
+    </div>
+    <div class="meta-row">
+      <div class="meta-item">
+        <div class="meta-label">Status</div>
+        <div class="meta-value" style="color:var(--green)">✓ 已完成</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Stack</div>
+        <div class="meta-value">Python 3.14 · aiohttp</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Dependencies</div>
+        <div class="meta-value">仅 aiohttp</div>
+      </div>
+      <div class="meta-item">
+        <div class="meta-label">Date</div>
+        <div class="meta-value">2026.06</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 2: PROBLEM                                               -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">01 — Background</div>
+    <div class="slide-title">问题背景</div>
+    <div class="slide-subtitle">
+      Claude Code 通过 Edit Tool 实现精确文件替换——模型输出 old_string 和 new_string，
+      Claude Code 在文件中精确查找 old_string 并替换。但 GLM 等模型生成的 old_string 经常与文件实际内容存在细微差异：
+    </div>
+
+    <div class="problem-list">
+      <div class="problem-item">
+        <div class="pi-icon">␣</div>
+        <div>
+          <div class="pi-name">多余空格</div>
+          <div class="pi-desc">原文 <code>name="test"</code> → 模型输出 <code>name = "test"</code></div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="pi-icon">↵</div>
+        <div>
+          <div class="pi-name">多余空行</div>
+          <div class="pi-desc">模型在函数间插入不存在的空白行</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="pi-icon">⇥</div>
+        <div>
+          <div class="pi-name">Tab / 空格混用</div>
+          <div class="pi-desc">文件用 4 空格缩进，模型输出 Tab</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="pi-icon">¶</div>
+        <div>
+          <div class="pi-name">换行符差异</div>
+          <div class="pi-desc">文件使用 <code>\r\n</code>，模型输出 <code>\n</code></div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="pi-icon">→</div>
+        <div>
+          <div class="pi-name">缩进偏移</div>
+          <div class="pi-desc">模型多缩进或少缩进了若干层级</div>
+        </div>
+      </div>
+      <div class="problem-item">
+        <div class="pi-icon">''</div>
+        <div>
+          <div class="pi-name">弯引号 / 直引号</div>
+          <div class="pi-desc">文件使用弯引号 <code>""</code>，模型输出直引号 <code>""</code></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 3: TOPOLOGY                                              -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">02 — Topology</div>
+    <div class="slide-title">部署拓扑与处理管线</div>
+    <div class="slide-subtitle">代理部署在 Claude Code 和上游模型 API 之间，透明拦截 SSE 流中的 Edit 操作。</div>
+
+    <div class="topo-diagram">
+      <div class="topo-main">
+        <div class="topo-node cc">
+          <div class="tn-tag">Client</div>
+          <div class="tn-name">Claude Code</div>
+          <div class="tn-desc">编辑器 / IDE / CLI<br>发起 API 请求</div>
+        </div>
+        <div class="topo-arrow">
+          <div class="ta-line"></div>
+          <div class="ta-label">HTTP</div>
+        </div>
+        <div class="topo-node proxy">
+          <div class="tn-tag">Proxy · :8080</div>
+          <div class="tn-name">ccedit-fix-proxy</div>
+          <div class="tn-desc">
+            <b>server.py</b> — HTTP 正向代理<br>
+            <b>stream_interceptor.py</b> — SSE 状态机<br>
+            <b>edit_fixer.py</b> — old_string 修正引擎
+          </div>
+        </div>
+        <div class="topo-arrow">
+          <div class="ta-line"></div>
+          <div class="ta-label">HTTPS</div>
+        </div>
+        <div class="topo-node api">
+          <div class="tn-tag">Upstream</div>
+          <div class="tn-name">GLM / Claude</div>
+          <div class="tn-desc">Anthropic 协议<br>text/event-stream</div>
+        </div>
+      </div>
+      <div class="topo-file-row">
+        <div class="topo-file">
+          <div class="tn-tag" style="color:var(--amber)">Local Read</div>
+          <div class="tn-name" style="color:var(--amber)">目标文件系统</div>
+          <div class="tn-desc">edit_fixer.py 读取待编辑文件 → 检测编码 + 换行符 → 匹配 old_string</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="pipeline">
+      <div class="pipe s1"><div class="p-num">STAGE 1</div><div class="p-name">请求转发</div><div class="p-desc">去除 hop-by-hop 头<br>替换 Host → 转发</div></div>
+      <div class="pipe s2"><div class="p-num">STAGE 2</div><div class="p-name">流式判断</div><div class="p-desc">Content-Type 检测<br>SSE → 拦截</div></div>
+      <div class="pipe s3"><div class="p-num">STAGE 3</div><div class="p-name">Edit 拦截</div><div class="p-desc">SSE 状态机识别 Edit<br>缓冲 input_json_delta</div></div>
+      <div class="pipe s4"><div class="p-num">STAGE 4</div><div class="p-name">old_string 修正</div><div class="p-desc">两级匹配引擎<br>读取文件 → 逐级尝试</div></div>
+      <div class="pipe s5"><div class="p-num">STAGE 5</div><div class="p-name">响应返回</div><div class="p-desc">修正后/原始 SSE<br>流式写回 CC</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 4: STATE MACHINE                                         -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">03 — State Machine</div>
+    <div class="slide-title">SSE 流拦截状态机</div>
+    <div class="slide-subtitle">基于 passthrough ↔ buffering_edit 两态状态机，普通内容实时透传（零延迟），Edit 工具调用触发缓冲修正。</div>
+
+    <div class="card" style="margin-bottom:20px;padding:32px 24px;">
+      <div class="state-diagram">
+        <div class="state-box pass">
+          <div class="sb-name">PASSTHROUGH</div>
+          <div class="sb-desc">默认状态<br>所有 SSE 事件实时透传<br>零延迟</div>
+        </div>
+        <div class="state-trans">
+          <div class="st-label fwd">Edit tool_use 检测</div>
+          <div class="st-line"></div>
+          <div class="st-sub">content_block_start(name=Edit)</div>
+        </div>
+        <div class="state-box buf">
+          <div class="sb-name">BUFFERING_EDIT</div>
+          <div class="sb-desc">缓冲模式<br>累积 input_json_delta<br>暂停向下游发送</div>
+        </div>
+        <div class="state-trans rev">
+          <div class="st-label back">修正 + 重生成</div>
+          <div class="st-line"></div>
+          <div class="st-sub">content_block_stop 触发</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="padding:24px;">
+      <div style="font-size:13px;font-weight:700;margin-bottom:16px;">SSE 事件时序</div>
+      <div class="timeline">
+        <div class="tl-row">
+          <div class="tl-actor a-api">API</div>
+          <div class="tl-track"><div class="tl-tag sse">content_block_start</div><div class="tl-tag dim">(type: tool_use, name: Edit)</div></div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-actor a-api">API</div>
+          <div class="tl-track"><div class="tl-tag data">input_json_delta</div><div class="tl-tag data">input_json_delta</div><div class="tl-tag data">input_json_delta</div><div class="tl-tag dim">...</div></div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-actor a-api">API</div>
+          <div class="tl-track"><div class="tl-tag sse">content_block_stop</div></div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-actor a-proxy">PROXY</div>
+          <div class="tl-track" style="background:var(--red-bg);border-color:var(--red-bdr)"><div class="tl-tag action">解析 JSON → 读取文件 → 修正 old_string → 重生成 SSE</div></div>
+        </div>
+        <div class="tl-row">
+          <div class="tl-actor a-cc">CC</div>
+          <div class="tl-track" style="background:var(--green-bg);border-color:var(--green-bdr)"><div class="tl-tag result">block_start</div><div class="tl-tag result">block_delta (fixed)</div><div class="tl-tag result">block_stop</div></div>
+        </div>
+      </div>
+      <div class="pass-note">
+        <strong>透传内容（零延迟）：</strong>text 内容块 · thinking 内容块 · 非 Edit tool_use — 实时透传，不经过缓冲
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 5: MATCHING ENGINE                                       -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">04 — Matching Engine</div>
+    <div class="slide-title">两级匹配引擎</div>
+    <div class="slide-subtitle">7 种匹配策略。层级 1 复刻 Claude Code 原生逻辑，层级 2 处理 Claude Code 无法覆盖的 GLM 特有问题。</div>
+
+    <div class="strat-grid">
+      <div class="strat-card">
+        <div class="strat-num l1">①</div>
+        <div class="strat-info">
+          <div class="si-name">精确匹配 <span class="tag native">Native</span></div>
+          <div class="si-desc">直接子串查找 <code>file_content.includes(search_string)</code></div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num l1">②</div>
+        <div class="strat-info">
+          <div class="si-name">引号归一化 <span class="tag native">Native</span></div>
+          <div class="si-desc">弯引号 ↔ 直引号转换，返回文件原文</div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num l2">①</div>
+        <div class="strat-info">
+          <div class="si-name">去行尾空白</div>
+          <div class="si-desc">每行 <code>rstrip()</code> 后精确匹配</div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num l2">③</div>
+        <div class="strat-info">
+          <div class="si-name">换行符统一</div>
+          <div class="si-desc"><code>\r\n</code> → <code>\n</code>，兼容 CRLF 文件</div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num l2">④</div>
+        <div class="strat-info">
+          <div class="si-name">Tab ↔ 空格</div>
+          <div class="si-desc">检测文件缩进风格，Tab ↔ 2/4/8 空格互转</div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num l2">⑤</div>
+        <div class="strat-info">
+          <div class="si-name">空白归一化 <span class="tag new">NEW</span></div>
+          <div class="si-desc">去除所有空格和空行后匹配（滑动窗口），定位后返回文件原文</div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num l2">⑥</div>
+        <div class="strat-info">
+          <div class="si-name">缩进匹配</div>
+          <div class="si-desc">按行 strip 匹配内容，计算缩进差值 delta，同步调整 new_string</div>
+        </div>
+      </div>
+      <div class="strat-card">
+        <div class="strat-num extra">+</div>
+        <div class="strat-info">
+          <div class="si-name">编码检测 <span class="tag extra">Extra</span></div>
+          <div class="si-desc">UTF-16LE BOM / UTF-8 严格 / GBK fallback</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Data Flow -->
+    <div class="dataflow-box">
+      <div style="font-size:12px;font-weight:700;margin-bottom:12px;">引擎内部数据流</div>
+      <div class="df-row"><div class="df-label">输入</div><div class="df-b in">file_path</div><div class="df-b in">old_string</div><div class="df-b in">new_string</div><div class="df-b in">replace_all</div></div>
+      <div class="df-row"><div class="df-label">读取</div><div class="df-b file">字节读取</div><div class="df-a">→</div><div class="df-b file">BOM/UTF-8/GBK</div><div class="df-a">→</div><div class="df-b file">\r\n→\n</div><div class="df-a">→</div><div class="df-b file">content</div></div>
+      <div class="df-row"><div class="df-label">层级 1</div><div class="df-b proc">精确匹配</div><div class="df-a">→ ✗ →</div><div class="df-b proc">引号归一化</div><div class="df-a">→ ✗ →</div><div class="df-b err">进入层级 2</div></div>
+      <div class="df-row"><div class="df-label">层级 2</div><div class="df-b proc">去行尾</div><div class="df-a">→</div><div class="df-b proc">换行符</div><div class="df-a">→</div><div class="df-b proc">Tab↔空格</div><div class="df-a">→</div><div class="df-b proc">空白归一化</div><div class="df-a">→</div><div class="df-b proc">缩进匹配</div></div>
+      <div class="df-row"><div class="df-label">成功</div><div class="df-b out">fixed_old_string</div><div class="df-a">+</div><div class="df-b out">fixed_new_string</div><div class="df-a">→</div><div class="df-b out">重生成 SSE</div></div>
+      <div class="df-row"><div class="df-label">失败</div><div class="df-b err">返回原始值</div><div class="df-a">→</div><div class="df-b err">透传原始 SSE</div><div class="df-a">→</div><div class="df-b err">CC 原生报错</div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 6: SSE RECONSTRUCTION                                    -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">05 — SSE Reconstruction</div>
+    <div class="slide-title">SSE 事件重生成</div>
+    <div class="slide-subtitle">修正成功后，代理丢弃原始缓冲事件，重新生成 3 个 SSE 事件发送给 Claude Code。</div>
+
+    <div class="recon-box">
+      <div class="recon-title">事件替换过程</div>
+      <div class="recon-row">
+        <div style="font-size:11px;font-weight:700;color:var(--ink4);width:45px;">丢弃</div>
+        <div class="recon-b del">content_block_start (original)</div>
+        <div class="recon-b del">content_block_delta × N (original)</div>
+        <div class="recon-b del">content_block_stop (original)</div>
+      </div>
+      <div class="recon-row" style="margin-top:10px;">
+        <div style="font-size:11px;font-weight:700;color:var(--green);width:45px;">生成</div>
+        <div class="recon-b new">content_block_start</div>
+        <div class="recon-b new">content_block_delta (fixed JSON)</div>
+        <div class="recon-b new">content_block_stop</div>
+      </div>
+    </div>
+
+    <div class="detail-grid">
+      <div class="detail-card">
+        <div class="dc-title" style="color:var(--blue)">index 保持一致</div>
+        <div class="dc-desc">重生成事件的 index 与原始相同，保证 Claude Code 解析正确</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-title" style="color:var(--violet)">tool_id 保持一致</div>
+        <div class="dc-desc">id 与原始 block 相同，保证 tool_use 关联正确</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-title" style="color:var(--red)">name 统一为 "Edit"</div>
+        <div class="dc-desc">兼容模型输出 "edit" (小写) 的情况</div>
+      </div>
+      <div class="detail-card">
+        <div class="dc-title" style="color:var(--green)">ensure_ascii=False</div>
+        <div class="dc-desc">保留中文等 Unicode 字符，避免二次转义</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 7: COMPATIBILITY                                         -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">06 — Compatibility</div>
+    <div class="slide-title">与 Claude Code 源码兼容性分析</div>
+    <div class="slide-subtitle">深入分析 FileEditTool.ts / utils.ts / fileRead.ts / file.ts，确保代理修正逻辑与 Claude Code 原生行为完全兼容。</div>
+
+    <div class="comp">
+      <table>
+        <thead><tr><th>处理环节</th><th>Claude Code</th><th>代理</th></tr></thead>
+        <tbody>
+          <tr><td>文件读取</td><td>BOM→utf16le / utf8<br>\r\n→\n</td><td class="check">✓ 一致 + GBK</td></tr>
+          <tr><td>精确匹配</td><td>content.includes()</td><td class="check">✓ 完全一致</td></tr>
+          <tr><td>引号归一化</td><td>normalizeQuotes→indexOf</td><td class="check">✓ 完全一致</td></tr>
+          <tr><td>引号保留</td><td>preserveQuoteStyle</td><td class="na">— call() 中处理</td></tr>
+          <tr><td>去行尾空白</td><td>normalizeFileEditInput</td><td class="check">✓ 不重复处理</td></tr>
+          <tr><td>sanitize</td><td>normalizeFileEditInput</td><td class="check">✓ 已禁用</td></tr>
+          <tr><td>Tab / 空格</td><td>不做</td><td class="warn">△ 代理额外</td></tr>
+          <tr><td>空白归一化</td><td>不做</td><td class="warn">△ 代理额外</td></tr>
+          <tr><td>缩进调整</td><td>不做</td><td class="warn">△ 代理额外</td></tr>
+          <tr><td>CRLF 恢复</td><td>writeTextContent</td><td class="check">✓ 自动处理</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="principle-row">
+      <div class="principle p1">
+        <div class="pp-title">零侵入</div>
+        <div class="pp-desc">不修改 Claude Code 源码<br>仅在 API 层透明拦截</div>
+      </div>
+      <div class="principle p2">
+        <div class="pp-title">零延迟</div>
+        <div class="pp-desc">非 Edit 内容实时透传<br>用户感知不到代理存在</div>
+      </div>
+      <div class="principle p3">
+        <div class="pp-title">安全回退</div>
+        <div class="pp-desc">修正失败自动回退<br>不影响正常流程</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 8: METRICS                                               -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">07 — Metrics</div>
+    <div class="slide-title">项目指标</div>
+    <div class="slide-subtitle"></div>
+
+    <div class="stat-row" style="margin-bottom:14px;">
+      <div class="stat-card"><div class="sn">7<span class="su"> 层</span></div><div class="sl">匹配策略</div></div>
+      <div class="stat-card"><div class="sn">1</div><div class="sl">外部依赖</div></div>
+      <div class="stat-card"><div class="sn">0<span class="su"> ms</span></div><div class="sl">非 Edit 延迟</div></div>
+    </div>
+    <div class="stat-row">
+      <div class="stat-card"><div class="sn">4</div><div class="sl">核心模块</div></div>
+      <div class="stat-card"><div class="sn">3</div><div class="sl">编码支持</div></div>
+      <div class="stat-card"><div class="sn">0</div><div class="sl">CC 源码改动</div></div>
+    </div>
+
+    <div class="file-tree" style="margin-top:28px;">
+<span class="dir">ccefix_proxy/</span>
+├── <span class="file">server.py</span>             <span class="cmt"># HTTP 正向代理（aiohttp）</span>
+├── <span class="file">stream_interceptor.py</span> <span class="cmt"># SSE 流拦截状态机</span>
+├── <span class="file">edit_fixer.py</span>         <span class="cmt"># old_string 修正引擎（核心）</span>
+├── <span class="file">__init__.py</span>
+└── <span class="file">__main__.py</span>           <span class="cmt"># python -m ccefix_proxy 入口</span>
+<span class="dir">log_web/</span>
+├── <span class="file">log_viewer.py</span>         <span class="cmt"># JSONL → HTML 日志可视化</span>
+├── <span class="file">start_proxy.sh</span>       <span class="cmt"># 一键启动代理</span>
+├── <span class="file">start_cc.sh</span>          <span class="cmt"># 一键启动 Claude Code</span>
+└── <span class="file">.env</span>                <span class="cmt"># 配置文件</span>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 9: DEPLOYMENT                                            -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide">
+  <div class="slide-inner">
+    <div class="slide-num">08 — Deployment</div>
+    <div class="slide-title">部署方式与快速启动</div>
+    <div class="slide-subtitle">支持同机和跨机两种部署拓扑。</div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:24px;">
+      <div class="card" style="border-left:4px solid var(--blue);">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--blue);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">方式 A</div>
+        <div style="font-size:14px;font-weight:800;margin-bottom:3px;">同机部署</div>
+        <div style="font-size:12.5px;color:var(--ink3);">代理和 Claude Code 在同一台机器，<code>localhost:8080</code> 直接通信</div>
+      </div>
+      <div class="card" style="border-left:4px solid var(--green);">
+        <div style="font-family:var(--mono);font-size:10px;font-weight:700;color:var(--green);letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;">方式 B</div>
+        <div style="font-size:14px;font-weight:800;margin-bottom:3px;">跨机部署</div>
+        <div style="font-size:12.5px;color:var(--ink3);">代理在服务器 A，Claude Code 在服务器 B，自动处理 <code>no_proxy</code> 绕过</div>
+      </div>
+    </div>
+
+    <div class="alert blue">
+      <div class="at">快速启动</div>
+      <p><b>1.</b> <code>pip install -r requirements.txt</code></p>
+      <p><b>2.</b> <code>cp .env.example .env</code> 并填写 API Key 和上游地址</p>
+      <p><b>3.</b> <code>bash start_proxy.sh</code> 启动代理</p>
+      <p><b>4.</b> <code>bash start_cc.sh</code> 启动 Claude Code</p>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════════════ -->
+<!-- SLIDE 10: FOOTER                                               -->
+<!-- ════════════════════════════════════════════════════════════════ -->
+<div class="slide slide-footer">
+  <div class="slide-inner" style="text-align:center;">
+    <div class="sf-line"></div>
+    <div style="font-size:24px;font-weight:900;letter-spacing:-0.5px;margin-bottom:8px;">ccedit-fix-proxy</div>
+    <div style="font-size:14px;color:var(--ink3);margin-bottom:24px;">Technical Report · 2026.06</div>
+  </div>
+</div>
+
+</body>
+</html>
