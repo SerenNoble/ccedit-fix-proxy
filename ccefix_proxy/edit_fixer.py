@@ -1,12 +1,9 @@
-"""Auto-fix Edit tool old_string to match actual file content.
+# -*- coding: utf-8 -*-
+"""自动修正 Edit tool 的 old_string 使其匹配文件实际内容。
 
-Strategies (in priority order):
-1. Exact match – no fix needed
-2. Strip trailing whitespace
-3. Normalize line endings (\\r\\n → \\n)
-4. Tab ↔ space conversion
-5. Indentation adjustment (find matching region, return actual content)
-6. Fuzzy line match (difflib-based)
+修正分两层：
+  层级1 – Claude Code 原生匹配（精确 → 引号归一化）
+  层级2 – 代理额外修正（去行尾、sanitize 反转义、换行、Tab、缩进、模糊）
 """
 from __future__ import annotations
 
@@ -23,94 +20,281 @@ def fix_edit_old_string(
     new_string: str,
     replace_all: bool = False,
 ) -> tuple[str, str]:
-    """Read *file_path* and try to fix *old_string* so it matches the file.
+    """读取 file_path，尝试修正 old_string 使其能匹配文件内容。
 
-    Returns ``(fixed_old_string, fixed_new_string)``.
-    If no fix is possible, returns the originals unchanged.
+    返回 (修正后的old_string, 修正后的new_string)。
+    如果无法修正，返回原始值。
     """
     if not file_path or not old_string:
         return old_string, new_string
 
     file_path = os.path.normpath(file_path)
 
-    # ── 1. Read file ──────────────────────────────────────────────────
+    # ── 读取文件（与 Claude Code 一致：检测编码 + 统一换行符）──────────
     try:
-        with open(file_path, "r", encoding="utf-8", errors="replace") as fh:
-            content = fh.read()
+        content = _read_file_content(file_path)
     except (FileNotFoundError, IOError, OSError) as exc:
-        log.warning("[edit-fix] Cannot read %s: %s", file_path, exc)
+        log.warning("[edit-fix] 无法读取文件 %s: %s", file_path, exc)
         return old_string, new_string
 
-    # ── 2. Exact match ────────────────────────────────────────────────
-    if old_string in content:
-        log.debug("[edit-fix] Exact match in %s", file_path)
-        return old_string, new_string
+    # ── 层级1: Claude Code 原生匹配（精确 → 引号归一化）───────────────
+    actual = _find_actual_string(content, old_string)
+    if actual is not None:
+        if actual == old_string:
+            log.debug("[edit-fix] 精确匹配 %s", file_path)
+        else:
+            log.info("[edit-fix] Claude Code 原生匹配（引号归一化）%s", file_path)
+        return actual, new_string
 
-    log.info("[edit-fix] old_string mismatch in %s – attempting fix", file_path)
+    log.info("[edit-fix] old_string 不匹配 %s，尝试代理额外修正", file_path)
 
-    # ── 3. Strip trailing whitespace ──────────────────────────────────
-    fixed_old = _strip_trailing_ws(old_string)
-    if fixed_old in content:
-        log.info("[edit-fix] Fixed: trailing whitespace stripped")
-        return fixed_old, _strip_trailing_ws(new_string)
+    # ── 层级2: 代理额外修正 ──────────────────────────────────────────
+    result = _proxy_extra_fixes(content, old_string, new_string, replace_all)
+    if result is not None:
+        return result
 
-    # ── 4. Normalize line endings ─────────────────────────────────────
-    fixed_old = old_string.replace("\r\n", "\n").replace("\r", "\n")
-    if fixed_old in content:
-        log.info("[edit-fix] Fixed: line endings normalized")
-        return fixed_old, new_string.replace("\r\n", "\n").replace("\r", "\n")
-
-    # ── 5. Tab ↔ space conversion ─────────────────────────────────────
-    for tab_size in (4, 2, 8):
-        fixed_old = old_string.replace("\t", " " * tab_size)
-        if fixed_old in content:
-            log.info("[edit-fix] Fixed: tabs → %d spaces", tab_size)
-            return fixed_old, new_string.replace("\t", " " * tab_size)
-
-    # Also try: actual file uses tabs, model used spaces
-    fixed_old = _spaces_to_tabs(old_string, content)
-    if fixed_old and fixed_old in content:
-        log.info("[edit-fix] Fixed: spaces → tabs")
-        return fixed_old, _spaces_to_tabs(new_string, content) or new_string
-
-    # ── 6. Indentation / matching region ──────────────────────────────
-    # Skip if replace_all (ambiguous – multiple matches possible)
-    if not replace_all:
-        match = _find_matching_region(old_string, content)
-        if match:
-            actual_old, indent_delta = match
-            fixed_new = _apply_indent_delta(new_string, indent_delta)
-            log.info("[edit-fix] Fixed: indentation adjusted (delta=%d)", indent_delta)
-            return actual_old, fixed_new
-
-    # ── 7. Fuzzy match ────────────────────────────────────────────────
-    if not replace_all:
-        fuzzy = _fuzzy_match(old_string, content)
-        if fuzzy:
-            actual_old, indent_delta = fuzzy
-            fixed_new = _apply_indent_delta(new_string, indent_delta)
-            log.info("[edit-fix] Fixed: fuzzy match")
-            return actual_old, fixed_new
-
-    log.warning("[edit-fix] Could not fix old_string for %s", file_path)
+    log.warning("[edit-fix] 无法修正 old_string: %s", file_path)
     return old_string, new_string
 
 
-# ── helpers ────────────────────────────────────────────────────────────────
+# ── 辅助函数 ──────────────────────────────────────────────────────────
+
+
+def _read_file_content(file_path: str) -> str:
+    """读取文件内容。
+
+    1. 按字节读取，检测 BOM 判断编码（UTF-16LE / UTF-8）
+    2. UTF-8 解码失败时 fallback 到 GBK（Windows 中文环境）
+    3. \r\n 统一转为 \n
+    """
+    with open(file_path, "rb") as fh:
+        raw = fh.read()
+
+    # 空文件
+    if not raw:
+        return ""
+
+    # 检测 BOM: FF FE → UTF-16LE
+    if len(raw) >= 2 and raw[0] == 0xFF and raw[1] == 0xFE:
+        content = raw.decode("utf-16-le")
+    else:
+        # 先尝试 UTF-8 严格解码，失败则 fallback GBK
+        try:
+            content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            log.debug("[edit-fix] UTF-8 解码失败，尝试 GBK: %s", file_path)
+            content = raw.decode("gbk", errors="replace")
+
+    # \r\n → \n（与 Claude Code 一致）
+    return content.replace("\r\n", "\n")
+
+
+# ── 层级1: Claude Code 原生匹配（复刻 FileEditTool/utils.ts:73-93）─────
+
+# 弯引号常量（Claude 无法输出，会输出直引号）
+_LEFT_SINGLE_CURLY = "‘"
+_RIGHT_SINGLE_CURLY = "’"
+_LEFT_DOUBLE_CURLY = "“"
+_RIGHT_DOUBLE_CURLY = "”"
+
+
+def _normalize_quotes(s: str) -> str:
+    """弯引号转直引号（与 Claude Code normalizeQuotes 一致）。"""
+    return (
+        s.replace(_LEFT_SINGLE_CURLY, "'")
+        .replace(_RIGHT_SINGLE_CURLY, "'")
+        .replace(_LEFT_DOUBLE_CURLY, '"')
+        .replace(_RIGHT_DOUBLE_CURLY, '"')
+    )
+
+
+def _find_actual_string(file_content: str, search_string: str) -> str | None:
+    """完全复刻 Claude Code findActualString（utils.ts:73-93）。
+
+    只做两步：精确匹配 → 引号归一化。
+    不做去行尾空白、不做 sanitize 反转义。
+    """
+    # ① 精确匹配
+    if search_string in file_content:
+        return search_string
+
+    # ② 引号归一化（弯引号 ↔ 直引号）
+    norm_search = _normalize_quotes(search_string)
+    norm_file = _normalize_quotes(file_content)
+    idx = norm_file.find(norm_search)
+    if idx != -1:
+        # 返回文件中实际截取的原文（保留弯引号）
+        return file_content[idx : idx + len(search_string)]
+
+    return None
+
+
+# ── 层级2: 代理额外修正 ──────────────────────────────────────────────
+
+# Claude 输出时的 sanitize 转义映射
+_DESANITIZATIONS: dict[str, str] = {
+    "<fnr>": "<function_results>",
+    "<n>": "<name>",
+    "</n>": "</name>",
+    "<o>": "<output>",
+    "</o>": "</output>",
+    "<e>": "<error>",
+    "</e>": "</error>",
+    "<s>": "<system>",
+    "</s>": "</system>",
+    "<r>": "<result>",
+    "</r>": "</result>",
+    "< META_START >": "<META_START>",
+    "< META_END >": "<META_END>",
+    "< EOT >": "<EOT>",
+    "< META >": "<META>",
+    "< SOS >": "<SOS>",
+    "\n\nH:": "\n\nHuman:",
+    "\n\nA:": "\n\nAssistant:",
+}
+
+
+def _desanitize(s: str) -> tuple[str, list[tuple[str, str]]]:
+    """反转义 Claude 的 sanitize 标记。返回 (结果, 已应用的替换列表)。"""
+    result = s
+    applied: list[tuple[str, str]] = []
+    for src, dst in _DESANITIZATIONS.items():
+        prev = result
+        result = result.replace(src, dst)
+        if result != prev:
+            applied.append((src, dst))
+    return result, applied
+
+
+def _proxy_extra_fixes(
+    file_content: str,
+    old_string: str,
+    new_string: str,
+    replace_all: bool = False,
+) -> tuple[str, str] | None:
+    """代理额外修正策略（Claude Code 原生匹配失败后执行）。
+
+    按优先级尝试：去行尾 → sanitize 反转义 → 换行符 → Tab → 缩进 → 模糊。
+    成功返回 (fixed_old, fixed_new)，全部失败返回 None。
+    """
+    # ① 去行尾空白
+    fixed_old = _strip_trailing_ws(old_string)
+    if fixed_old in file_content:
+        log.info("[edit-fix] 修正成功: 去除行尾空白")
+        return fixed_old, _strip_trailing_ws(new_string)
+
+    # ② sanitize 反转义（暂时注释，Claude Code 执行路径上不做此处理）
+    # desan_old, applied = _desanitize(old_string)
+    # if desan_old in file_content:
+    #     desan_new = new_string
+    #     for src, dst in applied:
+    #         desan_new = desan_new.replace(src, dst)
+    #     log.info("[edit-fix] 修正成功: sanitize 反转义")
+    #     return desan_old, desan_new
+
+    # ③ 统一换行符
+    fixed_old = old_string.replace("\r\n", "\n").replace("\r", "\n")
+    if fixed_old in file_content:
+        log.info("[edit-fix] 修正成功: 统一换行符")
+        return fixed_old, new_string.replace("\r\n", "\n").replace("\r", "\n")
+
+    # ④ Tab ↔ 空格转换
+    for tab_size in (4, 2, 8):
+        fixed_old = old_string.replace("\t", " " * tab_size)
+        if fixed_old in file_content:
+            log.info("[edit-fix] 修正成功: tab → %d空格", tab_size)
+            return fixed_old, new_string.replace("\t", " " * tab_size)
+
+    fixed_old = _spaces_to_tabs(old_string, file_content)
+    if fixed_old and fixed_old in file_content:
+        log.info("[edit-fix] 修正成功: 空格 → tab")
+        return fixed_old, _spaces_to_tabs(new_string, file_content) or new_string
+
+    # ⑤ 空白归一化匹配（处理多余空格/空行，GLM 常见问题）
+    if not replace_all:
+        norm_match = _normalize_whitespace_match(old_string, file_content)
+        if norm_match:
+            actual_old, fixed_new = norm_match
+            log.info("[edit-fix] 修正成功: 空白归一化")
+            return actual_old, fixed_new if fixed_new is not None else new_string
+
+    # ⑥ 缩进模糊匹配（replace_all 时跳过，避免歧义）
+    if not replace_all:
+        match = _find_matching_region(old_string, file_content)
+        if match:
+            actual_old, indent_delta = match
+            fixed_new = _apply_indent_delta(new_string, indent_delta)
+            log.info("[edit-fix] 修正成功: 缩进调整 (delta=%d)", indent_delta)
+            return actual_old, fixed_new
+
+    # ⑦ difflib 模糊匹配（暂时注释，风险较高）
+    # if not replace_all:
+    #     fuzzy = _fuzzy_match(old_string, file_content)
+    #     if fuzzy:
+    #         actual_old, indent_delta = fuzzy
+    #         fixed_new = _apply_indent_delta(new_string, indent_delta)
+    #         log.info("[edit-fix] 修正成功: 模糊匹配")
+    #         return actual_old, fixed_new
+
+    return None
 
 
 def _strip_trailing_ws(s: str) -> str:
+    """去除每行行尾空白。"""
     return "\n".join(line.rstrip() for line in s.split("\n"))
 
 
+def _collapse_whitespace(s: str) -> str:
+    """空白归一化：去掉所有空格和空白行，只保留有效内容。
+
+    用于定位匹配位置，不用于还原内容。
+    """
+    lines = s.split("\n")
+    # 去掉每行所有空格，过滤空行
+    result = ["".join(line.split()) for line in lines]
+    result = [line for line in result if line]
+    return "\n".join(result)
+
+
+def _normalize_whitespace_match(
+    old_string: str, file_content: str
+) -> tuple[str, str] | None:
+    """空白归一化后匹配：去掉所有空格/空白行后比较内容。
+
+    归一化只用于定位匹配位置，匹配成功后返回文件原文。
+    new_string 不做修改，直接透传（Claude Code 会精确替换文件原文）。
+    """
+    norm_old = _collapse_whitespace(old_string)
+    if not norm_old:
+        return None
+
+    norm_old_lines = norm_old.split("\n")
+    n = len(norm_old_lines)
+    file_lines = file_content.split("\n")
+
+    # 滑动窗口：归一化后行数可能不同（模型多输出了空行）
+    # 所以窗口大小用 n 到 n+5 范围搜索
+    for window_size in range(n, n + 6):
+        if window_size > len(file_lines):
+            break
+        for i in range(max(1, len(file_lines) - window_size + 1)):
+            window = file_lines[i : i + window_size]
+            norm_window = _collapse_whitespace("\n".join(window))
+            if norm_window == norm_old:
+                # 返回文件原文，new_string 不变
+                actual_old = "\n".join(window)
+                return actual_old, None  # None 表示 new_string 保持原样
+
+    return None
+
+
 def _spaces_to_tabs(s: str, content: str) -> str | None:
-    """Convert leading spaces to tabs if the file uses tabs."""
-    # Detect if file uses tabs for indentation
+    """如果文件使用 tab 缩进，将前导空格转为 tab。"""
     file_lines = content.split("\n")
     tab_lines = sum(1 for ln in file_lines if ln.startswith("\t"))
     space_lines = sum(1 for ln in file_lines if ln.startswith("  "))
     if tab_lines <= space_lines:
-        return None  # File doesn't primarily use tabs
+        return None  # 文件不以 tab 为主
 
     result_lines = []
     for line in s.split("\n"):
@@ -122,7 +306,7 @@ def _spaces_to_tabs(s: str, content: str) -> str | None:
 
 
 def _first_line_indent(s: str) -> int:
-    """Return the indentation of the first non-empty line."""
+    """返回第一个非空行的缩进空格数。"""
     for line in s.split("\n"):
         stripped = line.lstrip()
         if stripped:
@@ -133,9 +317,9 @@ def _first_line_indent(s: str) -> int:
 def _find_matching_region(
     old_string: str, content: str
 ) -> tuple[str, int] | None:
-    """Find the region in *content* whose stripped lines match *old_string*.
+    """在文件中按行 strip 后查找匹配区域。
 
-    Returns ``(actual_content, indent_delta)`` or ``None``.
+    返回 (文件中实际内容, 缩进差值) 或 None。
     """
     old_lines = old_string.split("\n")
     old_stripped = [ln.strip() for ln in old_lines]
@@ -152,7 +336,7 @@ def _find_matching_region(
 
 
 def _apply_indent_delta(s: str, delta: int) -> str:
-    """Add *delta* leading spaces to every indented line in *s*."""
+    """给所有非空行调整缩进（delta 为正加空格，为负减空格）。"""
     if delta == 0:
         return s
     lines = s.split("\n")
@@ -168,7 +352,7 @@ def _apply_indent_delta(s: str, delta: int) -> str:
 
 
 def _fuzzy_match(old_string: str, content: str) -> tuple[str, int] | None:
-    """Use difflib to find the best matching region."""
+    """用 difflib 查找最接近的匹配区域。"""
     old_lines = old_string.split("\n")
     content_lines = content.split("\n")
     n = len(old_lines)
@@ -202,7 +386,7 @@ def _fuzzy_match(old_string: str, content: str) -> tuple[str, int] | None:
 
 
 def _fuzzy_match_single(old_string: str, content: str) -> tuple[str, int] | None:
-    """Fuzzy match a single line."""
+    """单行模糊匹配。"""
     stripped_old = old_string.strip()
     best_line: str | None = None
     best_score = 0.0

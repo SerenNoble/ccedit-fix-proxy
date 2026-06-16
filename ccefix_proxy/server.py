@@ -22,6 +22,8 @@ import json
 import logging
 import os
 import sys
+import uuid
+from datetime import datetime, timezone
 from urllib.parse import urlparse
 
 import aiohttp
@@ -180,6 +182,20 @@ class EditFixProxy:
 # ── helpers ────────────────────────────────────────────────────────────────
 
 
+class _JsonlFormatter(logging.Formatter):
+    """每条日志输出为一行 JSON。"""
+    def format(self, record: logging.LogRecord) -> str:
+        entry = {
+            "ts": datetime.fromtimestamp(record.created, tz=timezone.utc).isoformat(),
+            "level": record.levelname,
+            "logger": record.name,
+            "msg": record.getMessage(),
+        }
+        if record.exc_info and record.exc_info[0]:
+            entry["exc"] = self.formatException(record.exc_info)
+        return json.dumps(entry, ensure_ascii=False)
+
+
 def _forward_headers(headers, upstream_url: str = "") -> dict[str, str]:
     """Strip hop-by-hop headers and fix Host for forwarding."""
     out: dict[str, str] = {}
@@ -268,18 +284,29 @@ def main() -> None:
     level = logging.DEBUG if args.verbose else logging.INFO
     log_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), "logs")
     os.makedirs(log_dir, exist_ok=True)
+
+    # Text: console + proxy.log
+    text_fmt = logging.Formatter(
+        "%(asctime)s %(levelname)-5s [%(name)s] %(message)s",
+        datefmt="%H:%M:%S",
+    )
+    stream_handler = logging.StreamHandler()
+    stream_handler.setFormatter(text_fmt)
     log_file = os.path.join(log_dir, "proxy.log")
+    file_handler = logging.FileHandler(log_file, encoding="utf-8")
+    file_handler.setFormatter(text_fmt)
+
+    # JSONL: 按 session 分文件 (session_YYYYMMDD_HHMMSS_<uid>.jsonl)
+    session_id = datetime.now().strftime("%Y%m%d_%H%M%S") + "_" + uuid.uuid4().hex[:6]
+    jsonl_file = os.path.join(log_dir, f"session_{session_id}.jsonl")
+    jsonl_handler = logging.FileHandler(jsonl_file, encoding="utf-8")
+    jsonl_handler.setFormatter(_JsonlFormatter())
 
     logging.basicConfig(
         level=level,
-        format="%(asctime)s %(levelname)-5s [%(name)s] %(message)s",
-        datefmt="%H:%M:%S",
-        handlers=[
-            logging.StreamHandler(),
-            logging.FileHandler(log_file, encoding="utf-8"),
-        ],
+        handlers=[stream_handler, file_handler, jsonl_handler],
     )
-    log.info("Log file: %s", log_file)
+    log.info("Session: %s | Log: %s | JSONL: %s", session_id, log_file, jsonl_file)
 
     if not args.upstream:
         print(
